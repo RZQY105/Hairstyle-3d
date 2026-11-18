@@ -1,0 +1,6 @@
+{
+  "appId": "com.supernova.hair3d",
+  "appName": "3D Hair Studio",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
