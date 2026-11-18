@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>3D Hair Studio</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background: radial-gradient(circle at center, #232733 0%, #0f1117 100%);
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    .header {
+      position: absolute;
+      top: env(safe-area-inset-top, 20px);
+      left: 16px;
+      right: 16px;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+    }
+    .header h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.5px; }
+    .header span { font-size: 11px; color: #94a3b8; }
+    .controls-panel {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 12px);
+      left: 16px;
+      right: 16px;
+      padding: 14px;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      z-index: 10;
+    }
+    .style-list {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .style-list::-webkit-scrollbar { display: none; }
+    .btn-style {
+      flex: 0 0 auto;
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.06);
+      color: #e2e8f0;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-style.active {
+      background: #3b82f6;
+      border-color: #60a5fa;
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .hint {
+      text-align: center;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 10px;
+    }
+  </style>
+  <!-- Import Map Three.js -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <div class="header">
+    <div>
+      <h1>3D HAIR STUDIO</h1>
+      <span>Geser untuk memutar 360° • Cubit untuk zoom</span>
+    </div>
+    <button id="btn-reset" class="btn-style" style="padding: 6px 12px; font-size: 12px;">Reset</button>
+  </div>
+
+  <div id="canvas-container"></div>
+
+  <div class="controls-panel">
+    <div class="hint">Pilih Model Potongan Rambut</div>
+    <div class="style-list" id="style-buttons">
+      <button class="btn-style active" data-style="comma">Comma Hair</button>
+      <button class="btn-style" data-style="french">French Crop</button>
+      <button class="btn-style" data-style="pompadour">Pompadour</button>
+      <button class="btn-style" data-style="buzz">Buzz Cut</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // 1. Setup Scene, Camera, Renderer
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0.4, 3.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    // 2. Pencahayaan Studio (Key, Fill, Rim Light)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    scene.add(ambientLight);
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    keyLight.position.set(3, 4, 4);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.8);
+    fillLight.position.set(-4, 1, 2);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    rimLight.position.set(0, 3, -4);
+    scene.add(rimLight);
+
+    // 3. Kontrol Putar & Zoom (Touch Friendly)
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 1.6;
+    controls.maxDistance = 5.5;
+    controls.target.set(0, 0.2, 0);
+
+    // 4. Group Utama Kepala Patung & Rambut
+    const mannequinGroup = new THREE.Group();
+    scene.add(mannequinGroup);
+
+    // Material Patung (Matte Mannequin) & Material Rambut
+    const skinMat = new THREE.MeshStandardMaterial({
+      color: 0xd6c7b8,
+      roughness: 0.55,
+      metalness: 0.05
+    });
+    const hairMat = new THREE.MeshStandardMaterial({
+      color: 0x18181b,
+      roughness: 0.4,
+      metalness: 0.1
+    });
+
+    // Buat Base Kepala & Leher Patung (Placeholder 3D Bawaan)
+    function buildMannequinHead() {
+      const headGroup = new THREE.Group();
+
+      // Kepala (proporsi oval manusia)
+      const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.62, 32, 32), skinMat);
+      cranium.scale.set(0.86, 1.12, 0.96);
+      cranium.position.y = 0.35;
+      headGroup.add(cranium);
+
+      // Rahang / Dagu
+      const jaw = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.26, 0.55, 32), skinMat);
+      jaw.scale.set(0.88, 1, 0.92);
+      jaw.position.set(0, -0.05, 0.08);
+      headGroup.add(jaw);
+
+      // Hidung sederhana sebagai penanda arah depan
+      const nose = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.24, 16), skinMat);
+      nose.rotation.x = Math.PI / 2.3;
+      nose.position.set(0, 0.22, 0.6);
+      headGroup.add(nose);
+
+      // Leher
+      const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.33, 0.65, 32), skinMat);
+      neck.position.set(0, -0.5, -0.05);
+      headGroup.add(neck);
+
+      return headGroup;
+    }
+
+    mannequinGroup.add(buildMannequinHead());
+
+    // Container khusus rambut yang bisa diganti-ganti
+    let currentHairMesh = new THREE.Group();
+    mannequinGroup.add(currentHairMesh);
+
+    // Fungsi membuat simulasi bentuk rambut 3D (Bisa diganti dengan GLTFLoader untuk file .glb asli)
+    function setHairStyle(style) {
+      mannequinGroup.remove(currentHairMesh);
+      currentHairMesh = new THREE.Group();
+
+      if (style === 'comma') {
+        // Bagian atas bervolume
+        const top = new THREE.Mesh(new THREE.SphereGeometry(0.65, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+        top.scale.set(0.92, 1.15, 1.02);
+        top.position.set(0, 0.42, -0.02);
+        currentHairMesh.add(top);
+
+        // Poni melengkung khas Comma Hair
+        const bangs = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.09, 16, 32, Math.PI * 1.1), hairMat);
+        bangs.position.set(-0.12, 0.62, 0.52);
+        bangs.rotation.set(0.3, 0.2, -0.6);
+        currentHairMesh.add(bangs);
+      } 
+      else if (style === 'french') {
+        // Taper fade bagian atas pendek & poni rata ke depan
+        const crop = new THREE.Mesh(new THREE.SphereGeometry(0.64, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.48), hairMat);
+        crop.scale.set(0.9, 1.1, 1.02);
+        crop.position.set(0, 0.43, 0.02);
+        currentHairMesh.add(crop);
+
+        const fringe = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.14, 0.25), hairMat);
+        fringe.position.set(0, 0.64, 0.48);
+        fringe.rotation.x = 0.25;
+        currentHairMesh.add(fringe);
+      } 
+      else if (style === 'pompadour') {
+        // Jambul tinggi ke atas & belakang
+        const pomp = new THREE.Mesh(new THREE.CapsuleGeometry(0.26, 0.55, 16, 32), hairMat);
+        pomp.rotation.x = Math.PI / 2.2;
+        pomp.scale.set(1.35, 1, 1.25);
+        pomp.position.set(0, 0.85, 0.08);
+        currentHairMesh.add(pomp);
+      } 
+      else if (style === 'buzz') {
+        // Cepak tipis mengikuti bentuk kepala
+        const buzz = new THREE.Mesh(new THREE.SphereGeometry(0.632, 32, 32, 0, Math.PI * 2, 0, Math.PI * 0.52), hairMat);
+        buzz.scale.set(0.87, 1.13, 0.97);
+        buzz.position.set(0, 0.36, -0.01);
+        currentHairMesh.add(buzz);
+      }
+
+      mannequinGroup.add(currentHairMesh);
+    }
+
+    // Set default rambut
+    setHairStyle('comma');
+
+    // Catatan untuk memuat file 3D asli (.glb) dari folder www/models/:
+    /*
+    const loader = new GLTFLoader();
+    loader.load('models/comma_hair.glb', (gltf) => {
+      mannequinGroup.remove(currentHairMesh);
+      currentHairMesh = gltf.scene;
+      mannequinGroup.add(currentHairMesh);
+    });
+    */
+
+    // 5. Event Listener UI
+    document.querySelectorAll('#style-buttons .btn-style').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        document.querySelectorAll('#style-buttons .btn-style').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        setHairStyle(e.target.dataset.style);
+      });
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      camera.position.set(0, 0.4, 3.2);
+      controls.target.set(0, 0.2, 0);
+      controls.update();
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 6. Loop Render
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
